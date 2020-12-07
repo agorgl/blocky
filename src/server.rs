@@ -1,13 +1,11 @@
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use base64;
 use serde_json;
-use url;
 use walkdir;
 
-use super::protocol::Listing;
+use super::protocol::{Listing, PatchRequest};
 use fast_rsync::{diff, Signature};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, StatusCode};
@@ -104,43 +102,22 @@ impl Server {
     }
 
     async fn route_patch(req: Request<Body>) -> Result<Response<Body>, Error> {
-        // Build query param map
-        let params: HashMap<String, String> = req
-            .uri()
-            .query()
-            .map(|v| {
-                url::form_urlencoded::parse(v.as_bytes())
-                    .into_owned()
-                    .collect()
-            })
-            .unwrap_or_else(HashMap::new);
+        // Deserialize request body
+        let req_body = hyper::body::to_bytes(req.into_body()).await?;
+        let patch_req = serde_json::from_slice::<PatchRequest>(&req_body)?;
 
-        // Fetch required params
-        let file = params.get("file");
-        let sig = params.get("sig");
-
-        // Process
-        if let (Some(f), Some(s)) = (file, sig) {
-            // Make path from param
-            let path = PathBuf::from(f);
-            // Decode signature into bytes
-            let sigb = base64::decode(&s)?;
-            // Create delta patch for file according to given signature
-            let patch = Self::make_patch(&path, &sigb[..])?;
-            // Respond with the patch
-            let response = Response::builder()
-                .status(StatusCode::OK)
-                .body(Body::from(patch))
-                .unwrap();
-            Ok(response)
-        } else {
-            // Respond with bad request when missing required parameter
-            let response = Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(Body::from("Bad reqwest"))
-                .unwrap();
-            Ok(response)
-        }
+        // Make path from param
+        let path = PathBuf::from(patch_req.file);
+        // Decode signature into bytes
+        let sigb = base64::decode(&patch_req.sig)?;
+        // Create delta patch for file according to given signature
+        let patch = Self::make_patch(&path, &sigb[..])?;
+        // Respond with the patch
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .body(Body::from(patch))
+            .unwrap();
+        Ok(response)
     }
 
     async fn route_notfound(_req: Request<Body>) -> Result<Response<Body>, Error> {

@@ -1,4 +1,4 @@
-use super::protocol::Listing;
+use super::protocol::{Listing, PatchRequest};
 use fast_rsync::{apply, Signature, SignatureOptions};
 use std::path::PathBuf;
 
@@ -94,18 +94,19 @@ impl Client {
     }
 
     async fn fetch_patch(&self, file: &PathBuf, sig: &String) -> Result<Vec<u8>, Error> {
-        // Construct request url and params
+        // Construct request url and body
         let url = format!("{}{}", self.server_base, "/patch");
-        let params = [
-            ("sig", sig.as_str()),
-            ("file", file.as_path().to_str().unwrap()),
-        ];
+        let req_body = PatchRequest {
+            file: file.clone(),
+            sig: sig.clone(),
+        };
+        let req_json = serde_json::to_vec_pretty(&req_body).unwrap();
 
         // Create the client
         let client = reqwest::Client::new();
 
         // Make the request
-        let req = client.get(&url).query(&params);
+        let req = client.post(&url).body(req_json);
         let resp = req.send().await?;
         let bytes = resp.bytes().await?;
 
