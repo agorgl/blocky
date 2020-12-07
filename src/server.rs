@@ -5,11 +5,12 @@ use base64;
 use serde_json;
 use walkdir;
 
-use super::protocol::{Listing, PatchRequest};
+use super::protocol::{Listing, ListingEntry, PatchRequest};
 use fast_rsync::{diff, Signature};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, StatusCode};
 use pretty_bytes::converter::convert as bytes_pretty;
+use sha2::{Digest, Sha256};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -85,12 +86,23 @@ impl Server {
 
     async fn route_list(_req: Request<Body>) -> Result<Response<Body>, Error> {
         // Fetch current working directory
+        log::info!("Listing request");
         let dir = std::env::current_dir()?;
 
-        // Build body data
+        // Gather files
+        log::info!("Gathering files");
+        let paths = Self::list_entries(&dir);
+
+        // Make entries
+        log::info!("Populating listing entries");
+        let files = paths
+            .into_iter()
+            .filter_map(|path| Self::list_entry_for_file(&path).ok())
+            .collect();
+
+        // Serialize body data
         let body = move || -> Result<_, Error> {
-            let paths = Self::list_entries(&dir);
-            let listing = Listing { paths };
+            let listing = Listing { files };
             Ok(serde_json::to_vec_pretty(&listing).unwrap()) // TODO
         }()?;
 
@@ -134,6 +146,22 @@ impl Server {
             .body(Body::from("Not found."))
             .unwrap();
         Ok(response)
+    }
+
+    fn list_entry_for_file(path: &PathBuf) -> Result<ListingEntry, Error> {
+        // Load data
+        let data = std::fs::read(path)?;
+
+        // Calculate hash
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        let hash = hasher.finalize();
+
+        // Build entry
+        Ok(ListingEntry {
+            path: path.clone(),
+            hash: base64::encode(&hash),
+        })
     }
 
     fn list_entries(dir: &PathBuf) -> Vec<PathBuf> {

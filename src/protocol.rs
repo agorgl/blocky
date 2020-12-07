@@ -3,7 +3,13 @@ use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Listing {
-    pub paths: Vec<PathBuf>,
+    pub files: Vec<ListingEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListingEntry {
+    pub path: PathBuf,
+    pub hash: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

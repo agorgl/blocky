@@ -1,6 +1,7 @@
 use super::protocol::{Listing, PatchRequest};
 use fast_rsync::{apply, Signature, SignatureOptions};
 use pretty_bytes::converter::convert as bytes_pretty;
+use sha2::{Digest, Sha256};
 use std::fmt::Display;
 use std::path::PathBuf;
 
@@ -55,13 +56,17 @@ impl Client {
 
     async fn update(&self) -> Result<(), Error> {
         // Fetch list of files
+        log::info!("Fetching listing");
         let listing = self.fetch_listing().await?;
 
         // Update filelist
-        for file in listing.paths {
-            log::info!("Updating file {:?}", file);
-            let stat = self.update_file(&file).await?;
-            log::info!("{}", &stat);
+        for file in listing.files {
+            log::info!("Updating file {:?}", file.path);
+            let result = self.update_file(&file.path, &file.hash).await?;
+            match result {
+                Some(stat) => log::info!("{}", &stat),
+                None => (),
+            }
         }
         Ok(())
     }
@@ -82,11 +87,31 @@ impl Client {
         Ok(body)
     }
 
-    async fn update_file(&self, file: &PathBuf) -> Result<FilePatchStats, Error> {
-        // Calculate file signature
-        log::info!("Calculating signature for file {:?}", file);
+    async fn update_file(
+        &self,
+        file: &PathBuf,
+        hash: &String,
+    ) -> Result<Option<FilePatchStats>, Error> {
+        // Load file data
+        log::info!("Loading data for file {:?}", file);
         let path = self.workdir.join(file);
         let data = std::fs::read(&path).unwrap_or(Vec::new());
+
+        // Calculate file hash
+        log::info!("Calculating hash for file {:?}", file);
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        let local_hash = base64::encode(&hasher.finalize());
+
+        // Check if file the same
+        if local_hash == *hash {
+            log::info!("File {:?} is same as remote, no update required", file);
+            return Ok(None);
+        }
+        log::info!("File {:?} remote differ, performing update", file);
+
+        // Calculate file signature
+        log::info!("Calculating signature for file {:?}", file);
         let sigb = Self::make_signature(&data[..]);
         let signature = base64::encode(&sigb);
 
@@ -110,7 +135,7 @@ impl Client {
             patch_size: patch.len(),
             new_size: output.len(),
         };
-        Ok(stats)
+        Ok(Some(stats))
     }
 
     async fn fetch_patch(&self, file: &PathBuf, sig: &String) -> Result<Vec<u8>, Error> {
