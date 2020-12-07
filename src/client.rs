@@ -1,5 +1,7 @@
 use super::protocol::{Listing, PatchRequest};
 use fast_rsync::{apply, Signature, SignatureOptions};
+use pretty_bytes::converter::convert as bytes_pretty;
+use std::fmt::Display;
 use std::path::PathBuf;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -16,6 +18,20 @@ struct FilePatchStats {
     original_size: usize,
     patch_size: usize,
     new_size: usize,
+}
+
+impl Display for FilePatchStats {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "File {:?}: original size: {}, patch size: {}, new size: {} ({:.1}% update)",
+            self.file,
+            bytes_pretty(self.original_size as f64),
+            bytes_pretty(self.patch_size as f64),
+            bytes_pretty(self.new_size as f64),
+            (self.patch_size as f64 / self.new_size as f64) * 100.0,
+        )
+    }
 }
 
 impl Client {
