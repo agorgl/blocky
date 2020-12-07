@@ -51,7 +51,7 @@ impl Server {
 
     async fn handler(req: Request<Body>) -> Result<Response<Body>, Error> {
         // Pass request to router
-        let response = Self::router(&req);
+        let response = Self::router(req).await;
 
         // Generic internal error responses
         if let Err(e) = response {
@@ -66,16 +66,16 @@ impl Server {
         response
     }
 
-    fn router(req: &Request<Body>) -> Result<Response<Body>, Error> {
+    async fn router(req: Request<Body>) -> Result<Response<Body>, Error> {
         match (req.method(), req.uri().path()) {
-            (&Method::GET, "/") => Self::route_home(&req),
-            (&Method::GET, "/list") => Self::route_list(&req),
-            (&Method::GET, "/patch") => Self::route_patch(&req),
-            _ => Self::route_notfound(&req),
+            (&Method::GET, "/") => Self::route_home(req).await,
+            (&Method::GET, "/list") => Self::route_list(req).await,
+            (&Method::POST, "/patch") => Self::route_patch(req).await,
+            _ => Self::route_notfound(req).await,
         }
     }
 
-    fn route_home(_req: &Request<Body>) -> Result<Response<Body>, Error> {
+    async fn route_home(_req: Request<Body>) -> Result<Response<Body>, Error> {
         // Greeting body
         let response = Response::builder()
             .status(StatusCode::OK)
@@ -84,7 +84,7 @@ impl Server {
         Ok(response)
     }
 
-    fn route_list(_req: &Request<Body>) -> Result<Response<Body>, Error> {
+    async fn route_list(_req: Request<Body>) -> Result<Response<Body>, Error> {
         // Fetch current working directory
         let dir = std::env::current_dir()?;
 
@@ -103,7 +103,7 @@ impl Server {
         Ok(response)
     }
 
-    fn route_patch(req: &Request<Body>) -> Result<Response<Body>, Error> {
+    async fn route_patch(req: Request<Body>) -> Result<Response<Body>, Error> {
         // Build query param map
         let params: HashMap<String, String> = req
             .uri()
@@ -143,7 +143,7 @@ impl Server {
         }
     }
 
-    fn route_notfound(_req: &Request<Body>) -> Result<Response<Body>, Error> {
+    async fn route_notfound(_req: Request<Body>) -> Result<Response<Body>, Error> {
         // Default 404 response
         let response = Response::builder()
             .status(StatusCode::NOT_FOUND)
