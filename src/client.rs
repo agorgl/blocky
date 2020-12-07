@@ -29,11 +29,11 @@ impl Client {
     #[tokio::main]
     pub async fn run(&self) {
         // Log mode info
-        println!("Running in client mode...");
+        log::info!("Running in client mode...");
 
         // Run update
         if let Err(e) = self.update().await {
-            eprintln!("client error: {}", e);
+            log::error!("{}", e);
         }
     }
 

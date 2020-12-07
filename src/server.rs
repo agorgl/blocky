@@ -24,7 +24,7 @@ impl Server {
     #[tokio::main]
     pub async fn run(&self) {
         // Log mode info
-        println!("Running in server mode...");
+        log::info!("Running in server mode...");
 
         // For every connection, we must make a `Service` to handle all
         // incoming HTTP requests on said connection.
@@ -43,7 +43,7 @@ impl Server {
 
         // Run this server for... forever!
         if let Err(e) = server.await {
-            eprintln!("server error: {}", e);
+            log::error!("{}", e);
         }
     }
 

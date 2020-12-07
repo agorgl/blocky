@@ -1,3 +1,5 @@
+extern crate log;
+
 mod client;
 mod protocol;
 mod server;
@@ -42,6 +44,11 @@ struct ServerOpts {
 }
 
 fn main() {
+    // Initialize logging
+    let log_env = env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info");
+    env_logger::init_from_env(log_env);
+
+    // Parse command line arguments and act accordingly
     let opts: Opts = Opts::parse();
     match opts.mode {
         Mode::Client(opts) => Client::new(opts.server, opts.directory).run(),
