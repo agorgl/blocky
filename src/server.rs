@@ -9,6 +9,7 @@ use super::protocol::{Listing, PatchRequest};
 use fast_rsync::{diff, Signature};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, StatusCode};
+use pretty_bytes::converter::convert as bytes_pretty;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -107,12 +108,18 @@ impl Server {
         let patch_req = serde_json::from_slice::<PatchRequest>(&req_body)?;
 
         // Make path from param
+        log::info!("Patch request for file {:?}", patch_req.file);
         let path = PathBuf::from(patch_req.file);
+
         // Decode signature into bytes
         let sigb = base64::decode(&patch_req.sig)?;
+
         // Create delta patch for file according to given signature
+        log::info!("Making patch for file {:?}", path);
         let patch = Self::make_patch(&path, &sigb[..])?;
+
         // Respond with the patch
+        log::info!("Patch size {}", bytes_pretty(patch.len() as f64));
         let response = Response::builder()
             .status(StatusCode::OK)
             .body(Body::from(patch))
