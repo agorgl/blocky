@@ -59,8 +59,9 @@ impl Client {
 
         // Update filelist
         for file in listing.paths {
+            log::info!("Updating file {:?}", file);
             let stat = self.update_file(&file).await?;
-            println!("{:?}", &stat);
+            log::info!("{}", &stat);
         }
         Ok(())
     }
@@ -83,15 +84,18 @@ impl Client {
 
     async fn update_file(&self, file: &PathBuf) -> Result<FilePatchStats, Error> {
         // Calculate file signature
+        log::info!("Calculating signature for file {:?}", file);
         let path = self.workdir.join(file);
         let data = std::fs::read(&path).unwrap_or(Vec::new());
         let sigb = Self::make_signature(&data[..]);
         let signature = base64::encode(&sigb);
 
         // Fetch patch for file
+        log::info!("Fetching patch for file {:?}", file);
         let patch = self.fetch_patch(file, &signature).await?;
 
         // Apply patch
+        log::info!("Applying patch for file {:?}", file);
         let mut output = Vec::new();
         apply(&data[..], &patch, &mut output)?;
 
