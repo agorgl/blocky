@@ -6,7 +6,7 @@ use base64;
 use serde_json;
 use walkdir;
 
-use super::protocol::{Listing, ListingEntry, PatchRequest};
+use super::protocol::{FileRequest, Listing, ListingEntry, PatchRequest};
 use fast_rsync::{diff, Signature};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, StatusCode};
@@ -114,6 +114,7 @@ impl Server {
             (&Method::GET, "/") => Self::route_home(ctx, req).await,
             (&Method::GET, "/list") => Self::route_list(ctx, req).await,
             (&Method::POST, "/patch") => Self::route_patch(ctx, req).await,
+            (&Method::POST, "/file") => Self::route_file(ctx, req).await,
             _ => Self::route_notfound(ctx, req).await,
         }
     }
@@ -168,6 +169,28 @@ impl Server {
         let response = Response::builder()
             .status(StatusCode::OK)
             .body(Body::from(patch))
+            .unwrap();
+        Ok(response)
+    }
+
+    async fn route_file(_ctx: &ServerContext, req: Request<Body>) -> Result<Response<Body>, Error> {
+        // Deserialize request body
+        let req_body = hyper::body::to_bytes(req.into_body()).await?;
+        let file_req = serde_json::from_slice::<FileRequest>(&req_body)?;
+
+        // Make path from param
+        log::info!("File request for file {:?}", file_req.file);
+        let path = PathBuf::from(file_req.file);
+
+        // Create delta patch for file according to given signature
+        log::info!("Loading file {:?}", path);
+        let data = std::fs::read(path)?;
+
+        // Respond with the patch
+        log::info!("File size {}", bytes_pretty(data.len() as f64));
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .body(Body::from(data))
             .unwrap();
         Ok(response)
     }

@@ -17,3 +17,8 @@ pub struct PatchRequest {
     pub file: PathBuf,
     pub sig: String,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileRequest {
+    pub file: PathBuf,
+}

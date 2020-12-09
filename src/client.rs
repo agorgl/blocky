@@ -1,4 +1,4 @@
-use super::protocol::{Listing, PatchRequest};
+use super::protocol::{FileRequest, Listing, PatchRequest};
 use fast_rsync::{apply, Signature, SignatureOptions};
 use pretty_bytes::converter::convert as bytes_pretty;
 use sha2::{Digest, Sha256};
@@ -124,6 +124,22 @@ impl Client {
         let mut output = Vec::new();
         apply(&data[..], &patch, &mut output)?;
 
+        // Calculate file hash
+        log::info!("Calculating new hash for file {:?}", file);
+        let mut hasher = Sha256::new();
+        hasher.update(&output);
+        let new_hash = base64::encode(&hasher.finalize());
+
+        // Check if final file is the same
+        let verified = new_hash == *hash;
+        if !verified {
+            log::warn!("Updated file {:?} with remote differ", file);
+            log::info!("Fetching file {:?}", file);
+            output = self.fetch_file(file).await?;
+        } else {
+            log::info!("File {:?} verified", file);
+        }
+
         // Write file
         std::fs::create_dir_all(&path.parent().unwrap())?;
         std::fs::write(&path, &output)?;
@@ -132,7 +148,7 @@ impl Client {
         let stats = FilePatchStats {
             file: file.clone(),
             original_size: data.len(),
-            patch_size: patch.len(),
+            patch_size: if verified { patch.len() } else { output.len() },
             new_size: output.len(),
         };
         Ok(Some(stats))
@@ -145,6 +161,24 @@ impl Client {
             file: file.clone(),
             sig: sig.clone(),
         };
+        let req_json = serde_json::to_vec_pretty(&req_body).unwrap();
+
+        // Create the client
+        let client = reqwest::Client::new();
+
+        // Make the request
+        let req = client.post(&url).body(req_json);
+        let resp = req.send().await?;
+        let bytes = resp.bytes().await?;
+
+        // Return result
+        Ok(bytes.to_vec())
+    }
+
+    async fn fetch_file(&self, file: &PathBuf) -> Result<Vec<u8>, Error> {
+        // Construct request url and body
+        let url = format!("{}{}", self.server_base, "/file");
+        let req_body = FileRequest { file: file.clone() };
         let req_json = serde_json::to_vec_pretty(&req_body).unwrap();
 
         // Create the client
